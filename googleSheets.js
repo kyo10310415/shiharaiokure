@@ -17,13 +17,13 @@ function getAuthClient() {
 
   // --- 方式1: メールアドレスと秘密鍵を個別に設定（推奨） ---
   if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-    // Renderの環境変数では \n がそのまま文字列になるケースがあるため両方対応
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY.includes('\\n')
-      ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      : process.env.GOOGLE_PRIVATE_KEY;
+    // 前後の余分な " や ' を除去
+    let privateKey = process.env.GOOGLE_PRIVATE_KEY.trim().replace(/^["']|["']$/g, '');
+    // \\n → 実際の改行に変換
+    privateKey = privateKey.replace(/\\n/g, '\n');
 
     credentials = {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      client_email: process.env.GOOGLE_CLIENT_EMAIL.trim(),
       private_key: privateKey,
     };
 
