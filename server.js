@@ -82,6 +82,51 @@ async function syncData(yearMonth) {
 // =============================
 
 /**
+ * GET /api/debug-auth
+ * 認証情報の診断（エンコード問題の特定用）
+ */
+app.get('/api/debug-auth', (req, res) => {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '';
+  const result = {
+    set: !!raw,
+    length: raw.length,
+    first10: raw.slice(0, 10),
+    last10: raw.slice(-10),
+  };
+
+  // Base64デコードを試みる
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+    const json = JSON.parse(decoded);
+    result.decodeMethod = 'base64';
+    result.hasClientEmail = !!json.client_email;
+    result.hasPrivateKey = !!json.private_key;
+    result.clientEmail = json.client_email || '(なし)';
+    result.privateKeyStart = json.private_key ? json.private_key.slice(0, 40) : '(なし)';
+    result.ok = true;
+  } catch (e1) {
+    result.base64Error = e1.message;
+
+    // Base64失敗 → そのままJSONとして試みる
+    try {
+      const json = JSON.parse(raw);
+      result.decodeMethod = 'raw_json';
+      result.hasClientEmail = !!json.client_email;
+      result.hasPrivateKey = !!json.private_key;
+      result.clientEmail = json.client_email || '(なし)';
+      result.privateKeyStart = json.private_key ? json.private_key.slice(0, 40) : '(なし)';
+      result.ok = true;
+    } catch (e2) {
+      result.jsonError = e2.message;
+      result.ok = false;
+      result.diagnosis = 'Base64デコードもJSON解析も失敗。エンコードが正しくない可能性があります。';
+    }
+  }
+
+  res.json(result);
+});
+
+/**
  * GET /api/status
  * サーバー状態確認 & 接続テスト
  */
