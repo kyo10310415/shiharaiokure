@@ -86,24 +86,21 @@ async function syncData(yearMonth) {
  * サーバー状態確認 & 接続テスト
  */
 app.get('/api/status', async (req, res) => {
-  try {
-    const connectionTest = await testConnection();
-    const currentMonth = getCurrentYearMonth();
-    
-    res.json({
-      status: 'running',
-      currentMonth,
-      spreadsheets: {
-        student: process.env.STUDENT_SPREADSHEET_ID ? '設定済み' : '未設定',
-        payment: process.env.PAYMENT_SPREADSHEET_ID ? '設定済み' : '未設定',
-        output: process.env.OUTPUT_SPREADSHEET_ID ? '設定済み' : '未設定',
-      },
-      connection: connectionTest,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  // testConnection は内部で例外を握りつぶすので、ここでは常に200を返す
+  const connectionTest = await testConnection();
+  const currentMonth = getCurrentYearMonth();
+
+  res.json({
+    status: 'running',
+    currentMonth,
+    spreadsheets: {
+      student: process.env.STUDENT_SPREADSHEET_ID ? '設定済み' : '未設定',
+      payment: process.env.PAYMENT_SPREADSHEET_ID ? '設定済み' : '未設定',
+      output: process.env.OUTPUT_SPREADSHEET_ID ? '設定済み' : '未設定',
+    },
+    connection: connectionTest,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /**

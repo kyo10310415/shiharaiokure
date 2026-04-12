@@ -621,44 +621,71 @@ async function checkStatus() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
-    
+
     document.getElementById('statusMonth').textContent = data.currentMonth || '---';
     document.getElementById('currentMonthDisplay').textContent = `現在: ${data.currentMonth}`;
 
     const conn = data.connection || {};
-    
-    document.getElementById('statusStudent').innerHTML = conn.studentSheet 
-      ? '<span class="status-ok">✅ 接続OK</span>' 
-      : '<span class="status-ng">❌ 接続失敗</span>';
-    
-    document.getElementById('statusPayment').innerHTML = conn.paymentSheet 
-      ? '<span class="status-ok">✅ 接続OK</span>' 
-      : '<span class="status-ng">❌ 接続失敗</span>';
-    
-    document.getElementById('statusOutput').innerHTML = conn.outputSheet 
-      ? '<span class="status-ok">✅ 接続OK</span>' 
-      : (data.spreadsheets.output === '未設定' 
-          ? '<span class="status-warn">⚠️ 未設定</span>'
-          : '<span class="status-ng">❌ 接続失敗</span>');
+    const sheets = data.spreadsheets || {};
 
-    // 接続テスト結果表示（セットアップタブ）
+    // 認証未設定かどうかで表示を分岐
+    const authNG = !conn.authConfigured;
+
+    function sheetStatusHtml(ok, setting) {
+      if (ok) return '<span class="status-ok">✅ 接続OK</span>';
+      if (authNG) return '<span class="status-warn">⚠️ 認証未設定</span>';
+      if (setting === '未設定') return '<span class="status-warn">⚠️ ID未設定</span>';
+      return '<span class="status-ng">❌ 接続失敗</span>';
+    }
+
+    document.getElementById('statusStudent').innerHTML =
+      sheetStatusHtml(conn.studentSheet, sheets.student);
+    document.getElementById('statusPayment').innerHTML =
+      sheetStatusHtml(conn.paymentSheet, sheets.payment);
+    document.getElementById('statusOutput').innerHTML =
+      conn.outputSheet
+        ? '<span class="status-ok">✅ 接続OK</span>'
+        : sheets.output === '未設定'
+          ? '<span class="status-warn">⚠️ 未作成</span>'
+          : authNG
+            ? '<span class="status-warn">⚠️ 認証未設定</span>'
+            : '<span class="status-ng">❌ 接続失敗</span>';
+
+    // セットアップタブの接続テスト結果
     const resultEl = document.getElementById('connectionResult');
     if (resultEl) {
       let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
-      const sheets = data.spreadsheets || {};
+
+      // 認証状態
+      html += `<div class="status-item">
+        <span class="status-label">Google認証</span>
+        <span class="status-value">${conn.authConfigured
+          ? '<span class="status-ok">✅ 設定済み</span>'
+          : '<span class="status-warn">⚠️ 未設定（GOOGLE_SERVICE_ACCOUNT_JSONを設定してください）</span>'
+        }</span>
+      </div>`;
+
       const items = [
-        { label: '生徒データシート', status: conn.studentSheet, setting: sheets.student },
-        { label: '支払い状況シート', status: conn.paymentSheet, setting: sheets.payment },
-        { label: '出力シート', status: conn.outputSheet, setting: sheets.output },
+        { label: '生徒データシート', ok: conn.studentSheet, setting: sheets.student },
+        { label: '支払い状況シート', ok: conn.paymentSheet, setting: sheets.payment },
+        { label: '出力シート（未払い履歴）', ok: conn.outputSheet, setting: sheets.output },
       ];
       items.forEach(item => {
-        const icon = item.status ? '✅' : (item.setting === '未設定' ? '⚠️' : '❌');
-        const text = item.status ? '接続OK' : (item.setting === '未設定' ? '未設定' : '接続失敗');
-        html += `<div class="status-item"><span class="status-label">${item.label}</span><span class="status-value">${icon} ${text}</span></div>`;
+        let badge;
+        if (item.ok) badge = '<span class="status-ok">✅ 接続OK</span>';
+        else if (authNG) badge = '<span class="status-warn">⚠️ 認証未設定</span>';
+        else if (item.setting === '未設定') badge = '<span class="status-warn">⚠️ ID未設定</span>';
+        else badge = '<span class="status-ng">❌ 接続失敗</span>';
+        html += `<div class="status-item">
+          <span class="status-label">${item.label}</span>
+          <span class="status-value">${badge}</span>
+        </div>`;
       });
 
       if (conn.errors && conn.errors.length > 0) {
-        html += `<div class="alert alert-warning">エラー詳細:<br>${conn.errors.join('<br>')}</div>`;
+        html += `<div class="alert alert-warning" style="margin-top:8px;">
+          <strong>詳細:</strong><br>${conn.errors.map(e => `• ${e}`).join('<br>')}
+        </div>`;
       }
       html += '</div>';
       resultEl.innerHTML = html;
@@ -667,7 +694,7 @@ async function checkStatus() {
   } catch (e) {
     console.error(e);
     ['statusStudent', 'statusPayment', 'statusOutput'].forEach(id => {
-      document.getElementById(id).innerHTML = '<span class="status-ng">❌ エラー</span>';
+      document.getElementById(id).innerHTML = '<span class="status-ng">❌ 通信エラー</span>';
     });
   }
 }

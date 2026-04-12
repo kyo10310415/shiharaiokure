@@ -443,20 +443,45 @@ async function initOutputSpreadsheet() {
 
 /**
  * スプレッドシートのデータ読み取り権限を確認するためのテスト
+ * ※認証情報未設定・接続失敗時でも必ず結果オブジェクトを返す（例外を投げない）
  */
 async function testConnection() {
   const results = {
     studentSheet: false,
     paymentSheet: false,
     outputSheet: false,
+    authConfigured: false,
     errors: [],
   };
-  
+
+  // 認証情報が設定されているか先にチェック
+  const hasAuth = !!(
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+    (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY)
+  );
+
+  if (!hasAuth) {
+    results.errors.push('Google認証情報が未設定です（GOOGLE_SERVICE_ACCOUNT_JSON を設定してください）');
+    return results;
+  }
+
+  results.authConfigured = true;
+
+  // Sheetsクライアントを一度だけ取得（失敗したら全シート失敗）
+  let sheets;
+  try {
+    sheets = await getSheetsClient();
+  } catch (e) {
+    results.errors.push(`認証エラー: ${e.message}`);
+    return results;
+  }
+
   // 生徒データシートの接続テスト
   try {
-    const sheets = await getSheetsClient();
     const studentId = process.env.STUDENT_SPREADSHEET_ID;
-    if (studentId) {
+    if (!studentId) {
+      results.errors.push('STUDENT_SPREADSHEET_ID が未設定です');
+    } else {
       await sheets.spreadsheets.values.get({
         spreadsheetId: studentId,
         range: '生徒データ!A1',
@@ -466,12 +491,13 @@ async function testConnection() {
   } catch (e) {
     results.errors.push(`生徒データシートエラー: ${e.message}`);
   }
-  
+
   // 支払い状況シートの接続テスト
   try {
-    const sheets = await getSheetsClient();
     const paymentId = process.env.PAYMENT_SPREADSHEET_ID;
-    if (paymentId) {
+    if (!paymentId) {
+      results.errors.push('PAYMENT_SPREADSHEET_ID が未設定です');
+    } else {
       await sheets.spreadsheets.values.get({
         spreadsheetId: paymentId,
         range: 'RAW_支払い状況!A13',
@@ -481,12 +507,13 @@ async function testConnection() {
   } catch (e) {
     results.errors.push(`支払い状況シートエラー: ${e.message}`);
   }
-  
+
   // 出力シートの接続テスト
   try {
-    const sheets = await getSheetsClient();
     const outputId = process.env.OUTPUT_SPREADSHEET_ID;
-    if (outputId) {
+    if (!outputId) {
+      // 未設定はエラーではなく「未設定」として扱う
+    } else {
       await sheets.spreadsheets.values.get({
         spreadsheetId: outputId,
         range: '未払い履歴!A1',
@@ -496,7 +523,7 @@ async function testConnection() {
   } catch (e) {
     results.errors.push(`出力シートエラー: ${e.message}`);
   }
-  
+
   return results;
 }
 
