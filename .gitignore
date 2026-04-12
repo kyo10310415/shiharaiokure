@@ -1,0 +1,27 @@
+# 依存関係
+node_modules/
+
+# 環境変数
+.env
+.env.local
+.env.production
+
+# ログ
+*.log
+logs/
+pids/
+*.pid
+
+# ビルド
+build/
+dist/
+
+# エディタ
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# その他
+*.backup
+*.bak

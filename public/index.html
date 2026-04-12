@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>未払い履歴管理システム</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, #1a73e8, #0d47a1);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-right {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+
+    /* コンテナ */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
+
+    /* カード */
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1a73e8;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px solid #e8f0fe;
+      padding-bottom: 10px;
+    }
+
+    /* ステータスグリッド */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .status-item {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .status-label {
+      font-size: 0.75rem;
+      color: #6c757d;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #333;
+    }
+    .status-ok { color: #28a745; }
+    .status-ng { color: #dc3545; }
+    .status-warn { color: #ffc107; }
+
+    /* ボタン */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-primary { background: #1a73e8; color: white; }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-success:hover { background: #1e7e34; }
+    .btn-warning { background: #ffc107; color: #212529; }
+    .btn-warning:hover { background: #e0a800; }
+    .btn-secondary { background: #6c757d; color: white; }
+    .btn-secondary:hover { background: #545b62; }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    /* フォーム */
+    .form-inline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #495057;
+    }
+    .form-control {
+      padding: 8px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: border-color 0.2s;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+    }
+
+    /* アラート */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
+    /* テーブル */
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    thead {
+      background: #1a73e8;
+      color: white;
+      position: sticky;
+      top: 0;
+    }
+    thead th {
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    thead th:first-child { border-radius: 8px 0 0 0; }
+    thead th:last-child { border-radius: 0 8px 0 0; }
+    tbody tr:nth-child(even) { background: #f8f9fa; }
+    tbody tr:hover { background: #e8f0fe; }
+    tbody td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #dee2e6;
+      white-space: nowrap;
+    }
+    tbody td:first-child { font-weight: 600; font-family: monospace; }
+
+    /* 支払いステータスバッジ */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-paid { background: #d4edda; color: #155724; }
+    .badge-unpaid { background: #f8d7da; color: #721c24; }
+    .badge-partial { background: #fff3cd; color: #856404; }
+    .badge-empty { background: #e9ecef; color: #6c757d; }
+
+    /* ローディング */
+    .loading {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #6c757d;
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid #e9ecef;
+      border-top: 3px solid #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* セットアップガイド */
+    .setup-guide {
+      background: #e8f0fe;
+      border: 1px solid #c5d9f7;
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .setup-guide h3 {
+      font-size: 1rem;
+      color: #1a73e8;
+      margin-bottom: 12px;
+    }
+    .setup-steps {
+      list-style: none;
+      counter-reset: step-counter;
+    }
+    .setup-steps li {
+      counter-increment: step-counter;
+      padding: 8px 0 8px 40px;
+      position: relative;
+      border-bottom: 1px solid #c5d9f7;
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+    .setup-steps li:last-child { border-bottom: none; }
+    .setup-steps li::before {
+      content: counter(step-counter);
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 26px;
+      height: 26px;
+      background: #1a73e8;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .code-block {
+      background: #2d3748;
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.82rem;
+      margin-top: 6px;
+      word-break: break-all;
+    }
+
+    /* タブ */
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e9ecef;
+      margin-bottom: 20px;
+    }
+    .tab {
+      padding: 10px 20px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+      color: #6c757d;
+    }
+    .tab:hover { color: #1a73e8; }
+    .tab.active {
+      color: #1a73e8;
+      border-bottom-color: #1a73e8;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* スプレッドシートリンク */
+    .sheet-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #1a73e8;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 4px 10px;
+      border: 1px solid #1a73e8;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .sheet-link:hover {
+      background: #e8f0fe;
+    }
+
+    /* レスポンシブ */
+    @media (max-width: 768px) {
+      .header h1 { font-size: 1.1rem; }
+      .container { padding: 12px 8px; }
+      .card { padding: 14px 16px; }
+      .status-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </svg>
+    未払い履歴管理システム
+  </h1>
+  <div class="header-right" id="currentMonthDisplay">読み込み中...</div>
+</div>
+
+<div class="container">
+
+  <!-- アラート表示エリア -->
+  <div id="alertArea"></div>
+
+  <!-- タブ -->
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">📊 ダッシュボード</div>
+    <div class="tab" data-tab="data">📋 データ一覧</div>
+    <div class="tab" data-tab="setup">⚙️ セットアップ</div>
+  </div>
+
+  <!-- ダッシュボードタブ -->
+  <div class="tab-content active" id="tab-dashboard">
+
+    <!-- ステータスカード -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        システム状態
+      </div>
+
+      <div class="status-grid" id="statusGrid">
+        <div class="status-item">
+          <span class="status-label">現在の月</span>
+          <span class="status-value" id="statusMonth">---</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">生徒データシート</span>
+          <span class="status-value" id="statusStudent">確認中...</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">支払い状況シート</span>
+          <span class="status-value" id="statusPayment">確認中...</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">出力シート</span>
+          <span class="status-value" id="statusOutput">確認中...</span>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="checkStatus()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        状態を再確認
+      </button>
+    </div>
+
+    <!-- データ同期カード -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+        </svg>
+        データ同期
+      </div>
+
+      <p style="font-size:0.9rem; color:#6c757d; margin-bottom:16px;">
+        Googleスプレッドシートからデータを取得して出力シートに書き込みます。<br>
+        毎月1日の朝9時に自動実行されます。手動で実行する場合は下記ボタンを使用してください。
+      </p>
+
+      <div class="form-inline" style="margin-bottom: 16px;">
+        <div class="form-group">
+          <label class="form-label">対象年月（省略で今月）</label>
+          <input type="text" class="form-control" id="syncMonth" placeholder="例: 2026/4" style="width: 140px;">
+        </div>
+
+        <button class="btn btn-primary" onclick="runSync()" id="syncBtn" style="margin-top: 20px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/><polyline points="23 20 23 14 17 14"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+          今すぐ同期する
+        </button>
+      </div>
+
+      <div id="syncResult" style="display:none;"></div>
+    </div>
+
+    <!-- スプレッドシートリンクカード -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        スプレッドシートリンク
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a href="https://docs.google.com/spreadsheets/d/1nwaXDkbkUX1FWlqGO4_Ph3_I9SkidXyx4KnviwlSeR8/edit#gid=2066998815" 
+           target="_blank" class="sheet-link">
+          📋 生徒データ
+        </a>
+        <a href="https://docs.google.com/spreadsheets/d/1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM/edit#gid=757950841" 
+           target="_blank" class="sheet-link">
+          💴 支払い状況
+        </a>
+        <a href="#" target="_blank" class="sheet-link" id="outputSheetLink" style="display:none;">
+          📊 出力シート（未払い履歴）
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- データ一覧タブ -->
+  <div class="tab-content" id="tab-data">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="3" y1="15" x2="21" y2="15"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+        </svg>
+        未払い履歴データ
+      </div>
+
+      <div class="btn-group" style="margin-bottom:16px;">
+        <button class="btn btn-primary" onclick="loadData()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/><polyline points="23 20 23 14 17 14"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+          データ更新
+        </button>
+        <span id="dataCount" style="font-size:0.85rem; color:#6c757d; padding:8px 0;"></span>
+      </div>
+
+      <div id="dataTable">
+        <div class="loading">
+          <div class="spinner"></div>
+          データを読み込み中...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- セットアップタブ -->
+  <div class="tab-content" id="tab-setup">
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.07 4.93l-1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M4.93 4.93l1.41 1.41M20 12h2M2 12h2M12 20v2M12 2v2"/>
+        </svg>
+        初期セットアップガイド
+      </div>
+
+      <div class="setup-guide">
+        <h3>🚀 使い始めるための手順</h3>
+        <ol class="setup-steps">
+          <li>
+            <strong>Google Cloud Console でサービスアカウントを作成</strong><br>
+            <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> にアクセスし、
+            新しいサービスアカウントを作成します。<br>
+            権限: 「編集者」または「Googleシート編集」を付与
+          </li>
+          <li>
+            <strong>サービスアカウントのJSONキーをダウンロード</strong><br>
+            サービスアカウント > キー > キーを追加 > JSON<br>
+            ダウンロードしたJSONファイルをBase64エンコードします：
+            <div class="code-block">base64 -i service-account.json | tr -d '\n'</div>
+          </li>
+          <li>
+            <strong>Renderの環境変数に設定</strong><br>
+            Render ダッシュボード > Environment から以下を設定：
+            <div class="code-block">GOOGLE_SERVICE_ACCOUNT_JSON = (上記のBase64文字列)
+STUDENT_SPREADSHEET_ID = 1nwaXDkbkUX1FWlqGO4_Ph3_I9SkidXyx4KnviwlSeR8
+PAYMENT_SPREADSHEET_ID = 1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM
+OUTPUT_SPREADSHEET_ID = (出力シート作成後に設定)</div>
+          </li>
+          <li>
+            <strong>サービスアカウントをスプレッドシートに共有</strong><br>
+            各スプレッドシートを開き、右上の「共有」から<br>
+            サービスアカウントのメールアドレス（xxx@yyy.iam.gserviceaccount.com）を<br>
+            「編集者」として追加してください
+          </li>
+          <li>
+            <strong>出力スプレッドシートを新規作成</strong><br>
+            認証設定が完了したら下記ボタンで出力用スプレッドシートを作成します
+            <div style="margin-top:10px;">
+              <button class="btn btn-success" onclick="createSpreadsheet()">
+                📊 出力スプレッドシートを作成
+              </button>
+            </div>
+            <div id="createResult" style="margin-top:10px;"></div>
+          </li>
+          <li>
+            <strong>初回データ同期を実行</strong><br>
+            「ダッシュボード」タブから「今すぐ同期する」を実行して<br>
+            初回データを取り込んでください
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 設定確認 -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        接続テスト
+      </div>
+
+      <p style="font-size:0.9rem; color:#6c757d; margin-bottom:16px;">
+        各スプレッドシートへの接続状態を確認します。
+      </p>
+
+      <button class="btn btn-primary" onclick="checkStatus()">
+        接続テストを実行
+      </button>
+
+      <div id="connectionResult" style="margin-top: 16px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ========== タブ切り替え ==========
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + target).classList.add('active');
+
+    if (target === 'data') loadData();
+  });
+});
+
+// ========== ヘルパー ==========
+function showAlert(message, type = 'info') {
+  const area = document.getElementById('alertArea');
+  const icons = {
+    success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️'
+  };
+  area.innerHTML = `<div class="alert alert-${type}">${icons[type]} ${message}</div>`;
+  setTimeout(() => { area.innerHTML = ''; }, 6000);
+}
+
+function getBadge(status) {
+  if (!status) return `<span class="badge badge-empty">—</span>`;
+  const s = status.trim();
+  if (s.includes('完了') || s.includes('済')) return `<span class="badge badge-paid">${s}</span>`;
+  if (s.includes('未払い') || s.includes('請求')) return `<span class="badge badge-unpaid">${s}</span>`;
+  if (s.includes('振替') || s.includes('部分') || s.includes('準備')) return `<span class="badge badge-partial">${s}</span>`;
+  if (s === 'なし' || s === '') return `<span class="badge badge-empty">—</span>`;
+  return `<span class="badge badge-partial">${s}</span>`;
+}
+
+// ========== 状態確認 ==========
+async function checkStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    
+    document.getElementById('statusMonth').textContent = data.currentMonth || '---';
+    document.getElementById('currentMonthDisplay').textContent = `現在: ${data.currentMonth}`;
+
+    const conn = data.connection || {};
+    
+    document.getElementById('statusStudent').innerHTML = conn.studentSheet 
+      ? '<span class="status-ok">✅ 接続OK</span>' 
+      : '<span class="status-ng">❌ 接続失敗</span>';
+    
+    document.getElementById('statusPayment').innerHTML = conn.paymentSheet 
+      ? '<span class="status-ok">✅ 接続OK</span>' 
+      : '<span class="status-ng">❌ 接続失敗</span>';
+    
+    document.getElementById('statusOutput').innerHTML = conn.outputSheet 
+      ? '<span class="status-ok">✅ 接続OK</span>' 
+      : (data.spreadsheets.output === '未設定' 
+          ? '<span class="status-warn">⚠️ 未設定</span>'
+          : '<span class="status-ng">❌ 接続失敗</span>');
+
+    // 接続テスト結果表示（セットアップタブ）
+    const resultEl = document.getElementById('connectionResult');
+    if (resultEl) {
+      let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+      const sheets = data.spreadsheets || {};
+      const items = [
+        { label: '生徒データシート', status: conn.studentSheet, setting: sheets.student },
+        { label: '支払い状況シート', status: conn.paymentSheet, setting: sheets.payment },
+        { label: '出力シート', status: conn.outputSheet, setting: sheets.output },
+      ];
+      items.forEach(item => {
+        const icon = item.status ? '✅' : (item.setting === '未設定' ? '⚠️' : '❌');
+        const text = item.status ? '接続OK' : (item.setting === '未設定' ? '未設定' : '接続失敗');
+        html += `<div class="status-item"><span class="status-label">${item.label}</span><span class="status-value">${icon} ${text}</span></div>`;
+      });
+
+      if (conn.errors && conn.errors.length > 0) {
+        html += `<div class="alert alert-warning">エラー詳細:<br>${conn.errors.join('<br>')}</div>`;
+      }
+      html += '</div>';
+      resultEl.innerHTML = html;
+    }
+
+  } catch (e) {
+    console.error(e);
+    ['statusStudent', 'statusPayment', 'statusOutput'].forEach(id => {
+      document.getElementById(id).innerHTML = '<span class="status-ng">❌ エラー</span>';
+    });
+  }
+}
+
+// ========== 同期実行 ==========
+async function runSync() {
+  const btn = document.getElementById('syncBtn');
+  const resultEl = document.getElementById('syncResult');
+  const yearMonth = document.getElementById('syncMonth').value.trim();
+  
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> 同期中...';
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div class="loading"><div class="spinner"></div> データを取得・書き込み中（しばらくお待ちください）...</div>';
+
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yearMonth: yearMonth || undefined }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      resultEl.innerHTML = `
+        <div class="alert alert-success">
+          ✅ 同期完了！<br>
+          対象月: <strong>${data.targetMonth}</strong>（${data.targetColumn}列）<br>
+          生徒数: <strong>${data.studentsCount}名</strong> | 
+          更新: <strong>${data.updated}件</strong> | 
+          新規追加: <strong>${data.added}件</strong>
+        </div>`;
+      showAlert(`${data.targetMonth} のデータ同期が完了しました`, 'success');
+    } else {
+      resultEl.innerHTML = `<div class="alert alert-error">❌ エラー: ${data.error}</div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="alert alert-error">❌ 通信エラー: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10"/><polyline points="23 20 23 14 17 14"/>
+        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+      </svg> 今すぐ同期する`;
+  }
+}
+
+// ========== データ一覧 ==========
+async function loadData() {
+  const tableEl = document.getElementById('dataTable');
+  const countEl = document.getElementById('dataCount');
+  
+  tableEl.innerHTML = '<div class="loading"><div class="spinner"></div> データを読み込み中...</div>';
+
+  try {
+    const res = await fetch('/api/data');
+    const data = await res.json();
+
+    if (data.error) {
+      tableEl.innerHTML = `<div class="alert alert-error">❌ ${data.error}</div>`;
+      return;
+    }
+
+    if (!data.headers || data.headers.length === 0) {
+      tableEl.innerHTML = `<div class="alert alert-info">ℹ️ データがありません。まずデータ同期を実行してください。</div>`;
+      countEl.textContent = '';
+      return;
+    }
+
+    const headers = data.headers;
+    const rows = data.rows || [];
+
+    countEl.textContent = `合計 ${rows.length} 名`;
+
+    let html = '<div class="table-wrapper"><table><thead><tr>';
+    headers.forEach((h, i) => {
+      html += `<th>${h || (i === 0 ? '学籍番号' : i === 1 ? '名前' : '')}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    rows.forEach(row => {
+      html += '<tr>';
+      row.forEach((cell, i) => {
+        if (i < 2) {
+          html += `<td>${cell || ''}</td>`;
+        } else {
+          html += `<td>${getBadge(cell)}</td>`;
+        }
+      });
+      // 列数が足りない場合に空セルを補完
+      for (let i = row.length; i < headers.length; i++) {
+        html += `<td>${i < 2 ? '' : getBadge('')}</td>`;
+      }
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    tableEl.innerHTML = html;
+
+  } catch (e) {
+    tableEl.innerHTML = `<div class="alert alert-error">❌ データ取得エラー: ${e.message}</div>`;
+  }
+}
+
+// ========== スプレッドシート作成 ==========
+async function createSpreadsheet() {
+  const resultEl = document.getElementById('createResult');
+  resultEl.innerHTML = '<div class="loading"><div class="spinner"></div> スプレッドシートを作成中...</div>';
+
+  try {
+    const res = await fetch('/api/create-spreadsheet', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.success) {
+      resultEl.innerHTML = `
+        <div class="alert alert-success">
+          ✅ スプレッドシートを作成しました！<br>
+          <strong>ID:</strong> ${data.spreadsheetId}<br>
+          <a href="${data.spreadsheetUrl}" target="_blank" class="sheet-link" style="margin-top:8px; display:inline-flex;">
+            📊 スプレッドシートを開く
+          </a><br><br>
+          <strong>⚠️ 重要:</strong> Renderの環境変数に以下を設定してください：<br>
+          <div style="background:#2d3748;color:#e2e8f0;padding:8px;border-radius:6px;font-family:monospace;font-size:0.82rem;margin-top:8px;word-break:break-all;">
+            OUTPUT_SPREADSHEET_ID = ${data.spreadsheetId}
+          </div>
+        </div>`;
+
+      // 出力シートリンクを更新
+      const link = document.getElementById('outputSheetLink');
+      if (link) {
+        link.href = data.spreadsheetUrl;
+        link.style.display = 'inline-flex';
+      }
+    } else {
+      resultEl.innerHTML = `<div class="alert alert-error">❌ エラー: ${data.error}</div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="alert alert-error">❌ エラー: ${e.message}</div>`;
+  }
+}
+
+// ========== 初期化 ==========
+checkStatus();
+</script>
+
+</body>
+</html>

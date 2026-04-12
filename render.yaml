@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: miharai-history
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: STUDENT_SPREADSHEET_ID
+        value: 1nwaXDkbkUX1FWlqGO4_Ph3_I9SkidXyx4KnviwlSeR8
+      - key: PAYMENT_SPREADSHEET_ID
+        value: 1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM
+      # 以下は Render ダッシュボードで直接設定してください（機密情報）
+      # - key: GOOGLE_SERVICE_ACCOUNT_JSON
+      #   value: (Base64エンコードされたサービスアカウントJSON)
+      # - key: OUTPUT_SPREADSHEET_ID
+      #   value: (出力スプレッドシートID)
