@@ -267,21 +267,40 @@ async function createOutputSpreadsheet() {
 }
 
 /**
+ * 出力スプレッドシートの実際のシート名を取得する共通関数
+ */
+async function getOutputSheetName(sheets, spreadsheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetNames = meta.data.sheets.map(s => s.properties.title);
+  console.log('📋 シート一覧:', sheetNames);
+
+  // 「未払い履歴」を探す（スペース・全角差異も考慮）
+  const found = sheetNames.find(name =>
+    name.trim().replace(/[\s　]/g, '') === '未払い履歴'
+  );
+  const sheetName = found || sheetNames[0];
+  console.log('📋 使用シート名:', JSON.stringify(sheetName));
+  return sheetName;
+}
+
+/**
  * 出力スプレッドシートの現在の状態を取得
  * A列: 学籍番号, B列: 名前, C列: 未払い遅れ回数, D列以降: 月別支払い状況
  */
 async function getOutputSpreadsheetData() {
   const sheets = await getSheetsClient();
   const spreadsheetId = process.env.OUTPUT_SPREADSHEET_ID;
-  
+
   if (!spreadsheetId) {
     throw new Error('OUTPUT_SPREADSHEET_ID が設定されていません');
   }
-  
-  // 行数上限を大きめに指定（列はA〜BZ = 78列まで対応）
+
+  const sheetName = await getOutputSheetName(sheets, spreadsheetId);
+
+  // シート名をシングルクォートで囲んで安全に指定
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: '未払い履歴!A1:BZ3000',
+    range: `'${sheetName}'!A1:Z3000`,
   });
 
   return response.data.values || [];
@@ -328,88 +347,84 @@ function colIndexToLetter(index) {
 async function writeMonthlyData(students, paymentMap, targetYearMonth) {
   const sheets = await getSheetsClient();
   const spreadsheetId = process.env.OUTPUT_SPREADSHEET_ID;
-  
+
   if (!spreadsheetId) {
     throw new Error('OUTPUT_SPREADSHEET_ID が設定されていません');
   }
 
+  // 実際のシート名を取得
+  const sn = await getOutputSheetName(sheets, spreadsheetId);
+
   // 現在のスプレッドシートデータを取得
   const currentData = await getOutputSpreadsheetData();
-  
-  // 現在の行データをマップ化（学籍番号 → 行インデックス）
+
+  // 現在の行データをマップ化（学籍番号 → 行番号 1-based）
   const studentRowMap = {};
   const headerRow = currentData[0] || [];
-  
+
   for (let i = 1; i < currentData.length; i++) {
     const row = currentData[i];
     if (row && row[0]) {
-      studentRowMap[row[0].trim()] = i + 1; // 1-based row number
+      studentRowMap[row[0].trim()] = i + 1;
     }
   }
-  
+
   // 対象月の列インデックスを取得
   const targetColIndex = getColumnIndexForMonth(targetYearMonth);
   const targetColLetter = colIndexToLetter(targetColIndex);
-  
+
   console.log(`✅ 対象列: ${targetColLetter} (index: ${targetColIndex})`);
-  
+
   // バッチ更新用データを準備
   const updateRequests = [];
   const newRows = [];
-  
+
   // ヘッダー行に月ヘッダーが存在するか確認・追加
   if (!headerRow[targetColIndex] || headerRow[targetColIndex].trim() !== targetYearMonth) {
     updateRequests.push({
-      range: `未払い履歴!${targetColLetter}1`,
+      range: `'${sn}'!${targetColLetter}1`,
       values: [[targetYearMonth]],
     });
   }
-  
-  // ヘッダー行にA1:C1がなければ追加
+
+  // ヘッダー行 A1:C1 がなければ追加
   if (!headerRow[0] || headerRow[0].trim() !== '学籍番号') {
     updateRequests.push({
-      range: '未払い履歴!A1:C1',
+      range: `'${sn}'!A1:C1`,
       values: [['学籍番号', '名前', '未払い遅れ回数']],
     });
   }
-  
+
   // 生徒ごとにデータを設定
   for (const student of students) {
     const { studentId, name } = student;
     const paymentStatus = paymentMap[studentId] || '';
-    
+
     if (studentRowMap[studentId]) {
-      // 既存の行を更新
       const rowNum = studentRowMap[studentId];
 
-      // A列・B列を更新（名前が変わっている可能性がある）
+      // A列・B列を更新
       updateRequests.push({
-        range: `未払い履歴!A${rowNum}:B${rowNum}`,
+        range: `'${sn}'!A${rowNum}:B${rowNum}`,
         values: [[studentId, name]],
       });
 
-      // C列: 未払い遅れ回数をCOUNTIF数式で更新
-      // D列以降の全月データの中で「未払い」を含むセル数をカウント
+      // C列: COUNTIF数式（D列以降の「未払い」を含むセル数）
       updateRequests.push({
-        range: `未払い履歴!C${rowNum}`,
+        range: `'${sn}'!C${rowNum}`,
         values: [[`=COUNTIF(D${rowNum}:${rowNum},"*未払い*")`]],
       });
 
       // 対象月の列を更新
       updateRequests.push({
-        range: `未払い履歴!${targetColLetter}${rowNum}`,
+        range: `'${sn}'!${targetColLetter}${rowNum}`,
         values: [[paymentStatus]],
       });
     } else {
-      // 新規行を追加
-      newRows.push({
-        studentId,
-        name,
-        paymentStatus,
-      });
+      newRows.push({ studentId, name, paymentStatus });
     }
   }
-  
+
   // 既存行を更新
   if (updateRequests.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
@@ -421,46 +436,37 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     });
     console.log(`✅ 既存データ更新: ${updateRequests.length}件`);
   }
-  
+
   // 新規行を追加
   if (newRows.length > 0) {
-    // 現在の最終行を取得
-    const lastRowNum = currentData.length + 1;
-    
-    const appendData = newRows.map((row, i) => {
-      // 必要な列数分の空配列を作成
+    const appendData = newRows.map((row) => {
       const rowData = new Array(targetColIndex + 1).fill('');
       rowData[0] = row.studentId;
       rowData[1] = row.name;
-      // C列(index 2): 未払い遅れ回数のCOUNTIF数式
-      // appendは行番号が確定後に設定するため、一旦プレースホルダーとして空にしておく
-      // → append後にbatchUpdateで数式を上書きする
-      rowData[2] = '';
+      rowData[2] = ''; // C列: append後にCOUNTIF数式を設定
       rowData[targetColIndex] = row.paymentStatus;
       return rowData;
     });
-    
+
     // append で行を追加（行番号が確定する）
     const appendResponse = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: '未払い履歴!A:A',
+      range: `'${sn}'!A:A`,
       valueInputOption: 'USER_ENTERED',
       includeValuesInResponse: false,
-      responseValueRenderOption: 'UNFORMATTED_VALUE',
       requestBody: { values: appendData },
     });
 
     // append後の実際の開始行番号を取得
-    // updatedRange例: "未払い履歴!A5:E10" → 開始行=5
     const updatedRange = appendResponse.data.updates?.updatedRange || '';
-    const rowMatch = updatedRange.match(/!.*?(\d+):/);
+    const rowMatch = updatedRange.match(/(\d+):/);
     const startRow = rowMatch ? parseInt(rowMatch[1]) : (currentData.length + 1);
 
     // 新規行のC列にCOUNTIF数式を設定
     const formulaRequests = newRows.map((_, i) => {
       const rowNum = startRow + i;
       return {
-        range: `未払い履歴!C${rowNum}`,
+        range: `'${sn}'!C${rowNum}`,
         values: [[`=COUNTIF(D${rowNum}:${rowNum},"*未払い*")`]],
       };
     });
@@ -492,14 +498,16 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
 async function initOutputSpreadsheet() {
   const sheets = await getSheetsClient();
   const spreadsheetId = process.env.OUTPUT_SPREADSHEET_ID;
-  
+
   if (!spreadsheetId) {
     throw new Error('OUTPUT_SPREADSHEET_ID が設定されていません');
   }
-  
+
+  const sn = await getOutputSheetName(sheets, spreadsheetId);
+
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: '未払い履歴!A1:C1',
+    range: `'${sn}'!A1:C1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [['学籍番号', '名前', '未払い遅れ回数']],
@@ -582,9 +590,10 @@ async function testConnection() {
     if (!outputId) {
       // 未設定はエラーではなく「未設定」として扱う
     } else {
+      const outSheetName = await getOutputSheetName(sheets, outputId);
       await sheets.spreadsheets.values.get({
         spreadsheetId: outputId,
-        range: '未払い履歴!A1',
+        range: `'${outSheetName}'!A1`,
       });
       results.outputSheet = true;
     }
