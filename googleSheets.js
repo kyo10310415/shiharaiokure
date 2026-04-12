@@ -390,13 +390,17 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
   const updateRequests = [];
   const newRows = [];
 
-  // --- 1行目ヘッダーの初期化（未設定時） ---
-  if (!isHeaderInitialized) {
-    updateRequests.push({
-      range: `'${sn}'!A1:C1`,
-      values: [['学籍番号', '名前', '未払い遅れ回数']],
-    });
-  }
+  // --- 1行目ヘッダーの初期化（常に確実に設定） ---
+  updateRequests.push({
+    range: `'${sn}'!A1:C1`,
+    values: [['学籍番号', '名前', '支払い遅れ回数']],
+  });
+
+  // --- 2行目: B2に「合計」を確実に設定 ---
+  updateRequests.push({
+    range: `'${sn}'!B2`,
+    values: [['合計']],
+  });
 
   // --- 1行目: 対象月のヘッダーを追加・更新 ---
   if (!headerRow[targetColIndex] || headerRow[targetColIndex].trim() !== targetYearMonth) {
@@ -411,7 +415,7 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
   // C2: 全期間の未払い合計
   updateRequests.push({
     range: `'${sn}'!C2`,
-    values: [[`=COUNTIF(D3:Z3000,"*未払い*")`]],
+    values: [[`=COUNTIF(D3:ZZ3000,"*未払い*")`]],
   });
   // 対象月列の2行目: その月の未払い合計
   updateRequests.push({
@@ -436,7 +440,7 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
       // C列: D列以降の「未払い」含むセル数
       updateRequests.push({
         range: `'${sn}'!C${rowNum}`,
-        values: [[`=COUNTIF(D${rowNum}:Z${rowNum},"*未払い*")`]],
+        values: [[`=COUNTIF(D${rowNum}:ZZ${rowNum},"*未払い*")`]],
       });
 
       // 対象月の列を更新
@@ -491,7 +495,7 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
       const rowNum = startRow + i;
       return {
         range: `'${sn}'!C${rowNum}`,
-        values: [[`=COUNTIF(D${rowNum}:Z${rowNum},"*未払い*")`]],
+        values: [[`=COUNTIF(D${rowNum}:ZZ${rowNum},"*未払い*")`]],
       };
     });
 
@@ -535,8 +539,8 @@ async function initOutputSpreadsheet() {
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [
-        ['学籍番号', '名前', '未払い遅れ回数'],  // 1行目: ヘッダー
-        ['', '合計', `=COUNTIF(D3:Z3000,"*未払い*")`],  // 2行目: 集計行
+        ['学籍番号', '名前', '支払い遅れ回数'],  // 1行目: ヘッダー
+        ['', '合計', `=COUNTIF(D3:ZZ3000,"*未払い*")`],  // 2行目: 集計行
       ],
     },
   });
