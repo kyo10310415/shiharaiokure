@@ -278,11 +278,12 @@ async function getOutputSpreadsheetData() {
     throw new Error('OUTPUT_SPREADSHEET_ID が設定されていません');
   }
   
+  // 行数上限を大きめに指定（列はA〜BZ = 78列まで対応）
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: '未払い履歴!A:ZZ',
+    range: '未払い履歴!A1:BZ3000',
   });
-  
+
   return response.data.values || [];
 }
 
