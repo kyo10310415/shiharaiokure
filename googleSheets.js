@@ -301,7 +301,7 @@ async function getOutputSpreadsheetData() {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${sheetName}'!A1:Z3000`,
+    range: `'${sheetName}'!A1:BZ3000`,
   });
 
   return response.data.values || [];
@@ -309,17 +309,17 @@ async function getOutputSpreadsheetData() {
 
 /**
  * 年月文字列から列インデックスを計算する
- * A列(0): 学籍番号, B列(1): 名前, C列(2): 未払い遅れ回数
+ * A列(0): 学籍番号, B列(1): 名前, C列(2): 支払い遅れ回数
  * D列(3)以降: 月別支払い状況
- * 2026/4 → D列(index 3), 2026/5 → E列(index 4), ...
- * 基準: 2026/4 = D列(index 3)
+ * 2026/3 → D列(index 3), 2026/4 → E列(index 4), 2026/5 → F列(index 5), ...
+ * 基準: 2026/3 = D列(index 3)
  */
 function getColumnIndexForMonth(yearMonth) {
   const [year, month] = yearMonth.split('/').map(Number);
 
-  // 基準: 2026年4月 = D列 (index 3)
+  // 基準: 2026年3月 = D列 (index 3)
   const BASE_YEAR = 2026;
-  const BASE_MONTH = 4;
+  const BASE_MONTH = 3;
   const BASE_COL_INDEX = 3;
 
   const monthsDiff = (year - BASE_YEAR) * 12 + (month - BASE_MONTH);
