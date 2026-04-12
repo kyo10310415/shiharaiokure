@@ -235,9 +235,9 @@ app.get('/', (req, res) => {
 });
 
 // =============================
-// 自動スケジュール (毎月1日 朝9時)
+// 自動スケジュール (毎月3日 22時 JST)
 // =============================
-cron.schedule('0 9 1 * *', async () => {
+cron.schedule('0 22 3 * *', async () => {
   console.log('\n⏰ 定期実行: 月次データ同期');
   try {
     await syncData();
@@ -261,6 +261,7 @@ app.listen(PORT, () => {
   console.log(`   STUDENT_SPREADSHEET_ID: ${process.env.STUDENT_SPREADSHEET_ID ? '✅ 設定済み' : '❌ 未設定'}`);
   console.log(`   PAYMENT_SPREADSHEET_ID: ${process.env.PAYMENT_SPREADSHEET_ID ? '✅ 設定済み' : '❌ 未設定'}`);
   console.log(`   OUTPUT_SPREADSHEET_ID: ${process.env.OUTPUT_SPREADSHEET_ID ? '✅ 設定済み' : '❌ 未設定'}`);
+  console.log(`\n⏰ 自動実行スケジュール: 毎月3日 22:00 JST`);
 });
 
 module.exports = app;
