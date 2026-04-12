@@ -285,7 +285,9 @@ async function getOutputSheetName(sheets, spreadsheetId) {
 
 /**
  * 出力スプレッドシートの現在の状態を取得
- * A列: 学籍番号, B列: 名前, C列: 未払い遅れ回数, D列以降: 月別支払い状況
+ * 1行目: ヘッダー（学籍番号・名前・未払い遅れ回数・月名...）
+ * 2行目: 各列の未払い合計数
+ * 3行目〜: 実データ
  */
 async function getOutputSpreadsheetData() {
   const sheets = await getSheetsClient();
@@ -297,7 +299,6 @@ async function getOutputSpreadsheetData() {
 
   const sheetName = await getOutputSheetName(sheets, spreadsheetId);
 
-  // シート名をシングルクォートで囲んで安全に指定
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `'${sheetName}'!A1:Z3000`,
@@ -342,7 +343,12 @@ function colIndexToLetter(index) {
 }
 
 /**
- * 出力スプレッドシートに今月のデータを書き込む
+ * 出力スプレッドシートに前月のデータを書き込む
+ *
+ * シート構造:
+ *   1行目: ヘッダー（A:学籍番号, B:名前, C:未払い遅れ回数, D〜:月名）
+ *   2行目: 集計行（C:未払い合計, D〜:各月の未払い合計 COUNTIF数式）
+ *   3行目〜: 実データ（生徒ごと）
  */
 async function writeMonthlyData(students, paymentMap, targetYearMonth) {
   const sheets = await getSheetsClient();
@@ -352,34 +358,47 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     throw new Error('OUTPUT_SPREADSHEET_ID が設定されていません');
   }
 
-  // 実際のシート名を取得
   const sn = await getOutputSheetName(sheets, spreadsheetId);
 
   // 現在のスプレッドシートデータを取得
   const currentData = await getOutputSpreadsheetData();
 
-  // 現在の行データをマップ化（学籍番号 → 行番号 1-based）
-  const studentRowMap = {};
-  const headerRow = currentData[0] || [];
+  // 対象月の列情報
+  const targetColIndex = getColumnIndexForMonth(targetYearMonth);
+  const targetColLetter = colIndexToLetter(targetColIndex);
+  console.log(`✅ 対象列: ${targetColLetter} (index: ${targetColIndex})`);
 
-  for (let i = 1; i < currentData.length; i++) {
+  // ========== 1行目: ヘッダー行 ==========
+  // currentData[0] が1行目
+  const headerRow = currentData[0] || [];
+  const isHeaderInitialized = headerRow[0] && headerRow[0].trim() === '学籍番号';
+
+  // ========== 2行目: 集計行 ==========
+  // currentData[1] が2行目
+
+  // ========== 3行目〜: 実データ ==========
+  // currentData[2]〜 が実データ（index 2以降）
+  // 学籍番号 → シート上の行番号(1-based) マップ
+  const studentRowMap = {};
+  for (let i = 2; i < currentData.length; i++) {
     const row = currentData[i];
-    if (row && row[0]) {
-      studentRowMap[row[0].trim()] = i + 1;
+    if (row && row[0] && row[0].trim()) {
+      studentRowMap[row[0].trim()] = i + 1; // 1-based
     }
   }
 
-  // 対象月の列インデックスを取得
-  const targetColIndex = getColumnIndexForMonth(targetYearMonth);
-  const targetColLetter = colIndexToLetter(targetColIndex);
-
-  console.log(`✅ 対象列: ${targetColLetter} (index: ${targetColIndex})`);
-
-  // バッチ更新用データを準備
   const updateRequests = [];
   const newRows = [];
 
-  // ヘッダー行に月ヘッダーが存在するか確認・追加
+  // --- 1行目ヘッダーの初期化（未設定時） ---
+  if (!isHeaderInitialized) {
+    updateRequests.push({
+      range: `'${sn}'!A1:C1`,
+      values: [['学籍番号', '名前', '未払い遅れ回数']],
+    });
+  }
+
+  // --- 1行目: 対象月のヘッダーを追加・更新 ---
   if (!headerRow[targetColIndex] || headerRow[targetColIndex].trim() !== targetYearMonth) {
     updateRequests.push({
       range: `'${sn}'!${targetColLetter}1`,
@@ -387,32 +406,37 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     });
   }
 
-  // ヘッダー行 A1:C1 がなければ追加
-  if (!headerRow[0] || headerRow[0].trim() !== '学籍番号') {
-    updateRequests.push({
-      range: `'${sn}'!A1:C1`,
-      values: [['学籍番号', '名前', '未払い遅れ回数']],
-    });
-  }
+  // --- 2行目: 集計行（COUNTIF数式）---
+  // 全生徒データが3行目〜なので、3行目から最大3000行を対象にCOUNTIF
+  // C2: 全期間の未払い合計
+  updateRequests.push({
+    range: `'${sn}'!C2`,
+    values: [[`=COUNTIF(D3:Z3000,"*未払い*")`]],
+  });
+  // 対象月列の2行目: その月の未払い合計
+  updateRequests.push({
+    range: `'${sn}'!${targetColLetter}2`,
+    values: [[`=COUNTIF(${targetColLetter}3:${targetColLetter}3000,"*未払い*")`]],
+  });
 
-  // 生徒ごとにデータを設定
+  // --- 3行目〜: 実データの書き込み ---
   for (const student of students) {
     const { studentId, name } = student;
     const paymentStatus = paymentMap[studentId] || '';
 
     if (studentRowMap[studentId]) {
+      // 既存行を更新
       const rowNum = studentRowMap[studentId];
 
-      // A列・B列を更新
       updateRequests.push({
         range: `'${sn}'!A${rowNum}:B${rowNum}`,
         values: [[studentId, name]],
       });
 
-      // C列: COUNTIF数式（D列以降の「未払い」を含むセル数）
+      // C列: D列以降の「未払い」含むセル数
       updateRequests.push({
         range: `'${sn}'!C${rowNum}`,
-        values: [[`=COUNTIF(D${rowNum}:${rowNum},"*未払い*")`]],
+        values: [[`=COUNTIF(D${rowNum}:Z${rowNum},"*未払い*")`]],
       });
 
       // 対象月の列を更新
@@ -425,7 +449,7 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     }
   }
 
-  // 既存行を更新
+  // 既存行の一括更新
   if (updateRequests.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
@@ -437,21 +461,20 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     console.log(`✅ 既存データ更新: ${updateRequests.length}件`);
   }
 
-  // 新規行を追加
+  // 新規行の追加（3行目以降にappend）
   if (newRows.length > 0) {
     const appendData = newRows.map((row) => {
       const rowData = new Array(targetColIndex + 1).fill('');
       rowData[0] = row.studentId;
       rowData[1] = row.name;
-      rowData[2] = ''; // C列: append後にCOUNTIF数式を設定
+      rowData[2] = ''; // C列はappend後にCOUNTIF数式を設定
       rowData[targetColIndex] = row.paymentStatus;
       return rowData;
     });
 
-    // append で行を追加（行番号が確定する）
     const appendResponse = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `'${sn}'!A:A`,
+      range: `'${sn}'!A3`,  // 3行目以降にappend
       valueInputOption: 'USER_ENTERED',
       includeValuesInResponse: false,
       requestBody: { values: appendData },
@@ -460,14 +483,15 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
     // append後の実際の開始行番号を取得
     const updatedRange = appendResponse.data.updates?.updatedRange || '';
     const rowMatch = updatedRange.match(/(\d+):/);
-    const startRow = rowMatch ? parseInt(rowMatch[1]) : (currentData.length + 1);
+    // 3行目より前にはならないよう保証
+    const startRow = rowMatch ? Math.max(parseInt(rowMatch[1]), 3) : Math.max(currentData.length + 1, 3);
 
-    // 新規行のC列にCOUNTIF数式を設定
+    // C列にCOUNTIF数式を設定
     const formulaRequests = newRows.map((_, i) => {
       const rowNum = startRow + i;
       return {
         range: `'${sn}'!C${rowNum}`,
-        values: [[`=COUNTIF(D${rowNum}:${rowNum},"*未払い*")`]],
+        values: [[`=COUNTIF(D${rowNum}:Z${rowNum},"*未払い*")`]],
       };
     });
 
@@ -483,7 +507,7 @@ async function writeMonthlyData(students, paymentMap, targetYearMonth) {
 
     console.log(`✅ 新規行追加: ${newRows.length}件`);
   }
-  
+
   return {
     updated: updateRequests.length,
     added: newRows.length,
@@ -507,14 +531,17 @@ async function initOutputSpreadsheet() {
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `'${sn}'!A1:C1`,
+    range: `'${sn}'!A1:C2`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [['学籍番号', '名前', '未払い遅れ回数']],
+      values: [
+        ['学籍番号', '名前', '未払い遅れ回数'],  // 1行目: ヘッダー
+        ['', '合計', `=COUNTIF(D3:Z3000,"*未払い*")`],  // 2行目: 集計行
+      ],
     },
   });
 
-  console.log('✅ ヘッダー行を初期化しました');
+  console.log('✅ ヘッダー行・集計行を初期化しました');
 }
 
 /**

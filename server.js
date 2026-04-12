@@ -43,10 +43,22 @@ function getCurrentYearMonth() {
 }
 
 /**
+ * 前月の年月を「YYYY/M」形式で取得
+ */
+function getPreviousYearMonth() {
+  const now = new Date();
+  const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const month = now.getMonth() === 0 ? 12 : now.getMonth(); // getMonth()は0始まりなので「前月」= getMonth()そのまま
+  return `${year}/${month}`;
+}
+
+/**
  * メインのデータ同期処理
+ * ※取得対象は「前月」のデータ
  */
 async function syncData(yearMonth) {
-  const targetMonth = yearMonth || getCurrentYearMonth();
+  // 引数指定がなければ前月を使用
+  const targetMonth = yearMonth || getPreviousYearMonth();
   console.log(`\n========== データ同期開始: ${targetMonth} ==========`);
   
   try {
@@ -152,10 +164,12 @@ app.get('/api/status', async (req, res) => {
   // testConnection は内部で例外を握りつぶすので、ここでは常に200を返す
   const connectionTest = await testConnection();
   const currentMonth = getCurrentYearMonth();
+  const previousMonth = getPreviousYearMonth();
 
   res.json({
     status: 'running',
     currentMonth,
+    previousMonth,
     spreadsheets: {
       student: process.env.STUDENT_SPREADSHEET_ID ? '設定済み' : '未設定',
       payment: process.env.PAYMENT_SPREADSHEET_ID ? '設定済み' : '未設定',

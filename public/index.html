@@ -419,7 +419,7 @@
 
       <p style="font-size:0.9rem; color:#6c757d; margin-bottom:16px;">
         Googleスプレッドシートからデータを取得して出力シートに書き込みます。<br>
-        毎月3日の22時（JST）に自動実行されます。手動で実行する場合は下記ボタンを使用してください。
+        毎月3日の22時（JST）に自動実行されます（前月データを取得）。手動で実行する場合は下記ボタンを使用してください。
       </p>
 
       <div class="form-inline" style="margin-bottom: 16px;">
@@ -624,7 +624,8 @@ async function checkStatus() {
     const data = await res.json();
 
     document.getElementById('statusMonth').textContent = data.currentMonth || '---';
-    document.getElementById('currentMonthDisplay').textContent = `現在: ${data.currentMonth}`;
+    document.getElementById('currentMonthDisplay').textContent =
+      `現在: ${data.currentMonth}　取得対象: ${data.previousMonth || '---'}（前月）`;
 
     const conn = data.connection || {};
     const sheets = data.spreadsheets || {};
