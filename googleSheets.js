@@ -7,30 +7,58 @@ const { google } = require('googleapis');
 
 /**
  * Google Sheets API クライアントを初期化する
+ *
+ * 認証情報の優先順位:
+ * 1. GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY （推奨: Renderで最も確実）
+ * 2. GOOGLE_SERVICE_ACCOUNT_JSON （Base64 or 生JSON）
  */
 function getAuthClient() {
   let credentials;
-  
-  // Base64エンコードされたJSONがある場合はデコードして使用
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    try {
-      const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf-8');
-      credentials = JSON.parse(decoded);
-    } catch (e) {
-      // Base64でない場合はそのままJSONとして解析
-      try {
-        credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-      } catch (e2) {
-        throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON の形式が不正です');
-      }
-    }
-  } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+
+  // --- 方式1: メールアドレスと秘密鍵を個別に設定（推奨） ---
+  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    // Renderの環境変数では \n がそのまま文字列になるケースがあるため両方対応
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY.includes('\\n')
+      ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      : process.env.GOOGLE_PRIVATE_KEY;
+
     credentials = {
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      private_key: privateKey,
     };
+
+  // --- 方式2: JSONをそのまま環境変数に設定 ---
+  } else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON.trim();
+
+    // まずそのままJSONとして試みる（Renderで一番多いパターン）
+    try {
+      credentials = JSON.parse(raw);
+    } catch (_e1) {
+      // 失敗したらBase64としてデコードして試みる
+      try {
+        const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+        credentials = JSON.parse(decoded);
+      } catch (_e2) {
+        throw new Error(
+          'GOOGLE_SERVICE_ACCOUNT_JSON の解析に失敗しました。\n' +
+          '【推奨】GOOGLE_CLIENT_EMAIL と GOOGLE_PRIVATE_KEY を個別に設定してください。'
+        );
+      }
+    }
+
+    // private_key の \n を正規化
+    if (credentials && credentials.private_key) {
+      credentials.private_key = credentials.private_key.includes('\\n')
+        ? credentials.private_key.replace(/\\n/g, '\n')
+        : credentials.private_key;
+    }
+
   } else {
-    throw new Error('Google認証情報が設定されていません。GOOGLE_SERVICE_ACCOUNT_JSON または GOOGLE_CLIENT_EMAIL と GOOGLE_PRIVATE_KEY を設定してください。');
+    throw new Error(
+      'Google認証情報が設定されていません。\n' +
+      'GOOGLE_CLIENT_EMAIL と GOOGLE_PRIVATE_KEY を設定してください。'
+    );
   }
 
   const auth = new google.auth.GoogleAuth({

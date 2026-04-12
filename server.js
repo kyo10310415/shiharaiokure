@@ -83,44 +83,62 @@ async function syncData(yearMonth) {
 
 /**
  * GET /api/debug-auth
- * 認証情報の診断（エンコード問題の特定用）
+ * 認証情報の診断
  */
 app.get('/api/debug-auth', (req, res) => {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '';
-  const result = {
-    set: !!raw,
-    length: raw.length,
-    first10: raw.slice(0, 10),
-    last10: raw.slice(-10),
+  const result = { methods: {}, recommendation: '' };
+
+  // --- 方式1: 個別キー ---
+  const email = process.env.GOOGLE_CLIENT_EMAIL || '';
+  const pkey  = process.env.GOOGLE_PRIVATE_KEY  || '';
+  result.methods.individual = {
+    GOOGLE_CLIENT_EMAIL_set: !!email,
+    GOOGLE_CLIENT_EMAIL_value: email || '(未設定)',
+    GOOGLE_PRIVATE_KEY_set: !!pkey,
+    GOOGLE_PRIVATE_KEY_first50: pkey ? pkey.slice(0, 50) : '(未設定)',
+    GOOGLE_PRIVATE_KEY_hasNewline: pkey.includes('\n'),
+    GOOGLE_PRIVATE_KEY_hasEscapedNewline: pkey.includes('\\n'),
+    ok: !!(email && pkey),
   };
 
-  // Base64デコードを試みる
-  try {
-    const decoded = Buffer.from(raw, 'base64').toString('utf-8');
-    const json = JSON.parse(decoded);
-    result.decodeMethod = 'base64';
-    result.hasClientEmail = !!json.client_email;
-    result.hasPrivateKey = !!json.private_key;
-    result.clientEmail = json.client_email || '(なし)';
-    result.privateKeyStart = json.private_key ? json.private_key.slice(0, 40) : '(なし)';
-    result.ok = true;
-  } catch (e1) {
-    result.base64Error = e1.message;
-
-    // Base64失敗 → そのままJSONとして試みる
+  // --- 方式2: JSON一括 ---
+  const raw = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim();
+  const jsonResult = { set: !!raw, length: raw.length, ok: false };
+  if (raw) {
+    jsonResult.first30 = raw.slice(0, 30);
+    // 生JSONとして試みる
     try {
-      const json = JSON.parse(raw);
-      result.decodeMethod = 'raw_json';
-      result.hasClientEmail = !!json.client_email;
-      result.hasPrivateKey = !!json.private_key;
-      result.clientEmail = json.client_email || '(なし)';
-      result.privateKeyStart = json.private_key ? json.private_key.slice(0, 40) : '(なし)';
-      result.ok = true;
-    } catch (e2) {
-      result.jsonError = e2.message;
-      result.ok = false;
-      result.diagnosis = 'Base64デコードもJSON解析も失敗。エンコードが正しくない可能性があります。';
+      const j = JSON.parse(raw);
+      jsonResult.decodeMethod = 'raw_json';
+      jsonResult.hasClientEmail = !!j.client_email;
+      jsonResult.hasPrivateKey  = !!j.private_key;
+      jsonResult.clientEmail    = j.client_email || '(なし)';
+      jsonResult.ok = true;
+    } catch (_e1) {
+      // Base64として試みる
+      try {
+        const j = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+        jsonResult.decodeMethod = 'base64';
+        jsonResult.hasClientEmail = !!j.client_email;
+        jsonResult.hasPrivateKey  = !!j.private_key;
+        jsonResult.clientEmail    = j.client_email || '(なし)';
+        jsonResult.ok = true;
+      } catch (_e2) {
+        jsonResult.error = '生JSONもBase64も解析失敗';
+      }
     }
+  }
+  result.methods.json = jsonResult;
+
+  // 推奨アクション
+  if (result.methods.individual.ok) {
+    result.recommendation = '✅ 個別キー方式で認証情報が設定されています';
+  } else if (result.methods.json.ok) {
+    result.recommendation = '✅ JSON方式で認証情報が設定されています';
+  } else {
+    result.recommendation =
+      '❌ 認証情報が正しく設定されていません。' +
+      '【推奨】Renderの環境変数に GOOGLE_CLIENT_EMAIL と GOOGLE_PRIVATE_KEY を個別に設定してください。';
   }
 
   res.json(result);
