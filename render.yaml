@@ -5,7 +5,14 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     plan: free
+    healthCheckPath: /health
     envVars:
+      - key: PAYMENT_ADMIN_USERNAME
+        sync: false
+      - key: PAYMENT_ADMIN_PASSWORD
+        sync: false
+      - key: PAYMENT_PUBLIC_ORIGIN
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT

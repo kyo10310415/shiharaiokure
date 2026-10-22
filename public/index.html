@@ -532,7 +532,7 @@
             <div class="code-block">GOOGLE_SERVICE_ACCOUNT_JSON = (上記のBase64文字列)
 STUDENT_SPREADSHEET_ID = 1nwaXDkbkUX1FWlqGO4_Ph3_I9SkidXyx4KnviwlSeR8
 PAYMENT_SPREADSHEET_ID = 1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM
-OUTPUT_SPREADSHEET_ID = (出力シート作成後に設定)</div>
+OUTPUT_SPREADSHEET_ID = (所有者が用意した出力シートのID)</div>
           </li>
           <li>
             <strong>サービスアカウントをスプレッドシートに共有</strong><br>
@@ -541,14 +541,11 @@ OUTPUT_SPREADSHEET_ID = (出力シート作成後に設定)</div>
             「編集者」として追加してください
           </li>
           <li>
-            <strong>出力スプレッドシートを新規作成</strong><br>
-            認証設定が完了したら下記ボタンで出力用スプレッドシートを作成します
+            <strong>出力先を準備</strong><br>
+            所有者が用意したシートを出力先に設定します
             <div style="margin-top:10px;">
-              <button class="btn btn-success" onclick="createSpreadsheet()">
-                📊 出力スプレッドシートを作成
-              </button>
+              <p>出力スプレッドシートは所有者が作成し、環境変数 OUTPUT_SPREADSHEET_ID に設定してください。この画面から出力先は変更できません。</p>
             </div>
-            <div id="createResult" style="margin-top:10px;"></div>
           </li>
           <li>
             <strong>初回データ同期を実行</strong><br>
@@ -715,7 +712,7 @@ async function runSync() {
   try {
     const res = await fetch('/api/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Payment-Request': '1' },
       body: JSON.stringify({ yearMonth: yearMonth || undefined }),
     });
     const data = await res.json();
@@ -799,43 +796,6 @@ async function loadData() {
 
   } catch (e) {
     tableEl.innerHTML = `<div class="alert alert-error">❌ データ取得エラー: ${e.message}</div>`;
-  }
-}
-
-// ========== スプレッドシート作成 ==========
-async function createSpreadsheet() {
-  const resultEl = document.getElementById('createResult');
-  resultEl.innerHTML = '<div class="loading"><div class="spinner"></div> スプレッドシートを作成中...</div>';
-
-  try {
-    const res = await fetch('/api/create-spreadsheet', { method: 'POST' });
-    const data = await res.json();
-
-    if (data.success) {
-      resultEl.innerHTML = `
-        <div class="alert alert-success">
-          ✅ スプレッドシートを作成しました！<br>
-          <strong>ID:</strong> ${data.spreadsheetId}<br>
-          <a href="${data.spreadsheetUrl}" target="_blank" class="sheet-link" style="margin-top:8px; display:inline-flex;">
-            📊 スプレッドシートを開く
-          </a><br><br>
-          <strong>⚠️ 重要:</strong> Renderの環境変数に以下を設定してください：<br>
-          <div style="background:#2d3748;color:#e2e8f0;padding:8px;border-radius:6px;font-family:monospace;font-size:0.82rem;margin-top:8px;word-break:break-all;">
-            OUTPUT_SPREADSHEET_ID = ${data.spreadsheetId}
-          </div>
-        </div>`;
-
-      // 出力シートリンクを更新
-      const link = document.getElementById('outputSheetLink');
-      if (link) {
-        link.href = data.spreadsheetUrl;
-        link.style.display = 'inline-flex';
-      }
-    } else {
-      resultEl.innerHTML = `<div class="alert alert-error">❌ エラー: ${data.error}</div>`;
-    }
-  } catch (e) {
-    resultEl.innerHTML = `<div class="alert alert-error">❌ エラー: ${e.message}</div>`;
   }
 }
 
