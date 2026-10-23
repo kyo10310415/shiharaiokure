@@ -143,3 +143,8 @@ cp .env.example .env
 # 起動
 npm start
 ```
+
+### 依存関係の再現性（SEC-044）
+package-lock.jsonをpackage.jsonの宣言範囲へ整合し、別アプリ名・別メジャーExpress/Google APIs等が記録された旧lockを解消しました。package.jsonのバージョン範囲は変更していません。Render BlueprintのbuildCommandはnpm ciです。新環境でもnpm ciを使用し、依存を更新する場合はmanifestとlockを同時にレビューしてください。
+
+認証診断API（SEC-045）は第1バッチですでに管理者認証必須・booleanだけの応答へ修正済みです。今回、ダミー秘密値を使った既存回帰テストで再確認しました。秘密値の断片・アカウント名は返しません。
