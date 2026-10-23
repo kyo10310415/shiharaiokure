@@ -151,3 +151,6 @@ package-lock.jsonをpackage.jsonの宣言範囲へ整合し、別アプリ名・
 
 ### Google APIクライアント更新（2026-10-23）
 googleapisを150.0.1へ更新し、Google連携側の古いuuid推移依存を除去しました。Sheets v4 / Drive v3の使用方法と認証設定は維持します。Node22.23.4でclean install（ignore-scripts）、認可7件とGoogle連携4件の計11テストが成功。実GoogleAuthと生成API/Gaxiosを使用し、認証メタデータ・HTTP応答のみ置き換えて読取り/空応答/Drive作成/Sheets rename・init・batch・append/失敗を確認しました。外部通信を遮断しており、実際の鍵署名・Google認証・本番シートへの書込みは未検証です。production auditはModerate5→2（node-cronとuuidが残存）、High/Critical0。
+
+### 定期実行ライブラリ更新（2026-10-23）
+node-cron4.6.0へ更新し、残るuuid依存を除去しました。毎月3日22:00 JSTの実行式・timezone・処理は維持。Node22.23.4で依存導入（ignore-scripts）、12テストが成功。サーバー起動部分はサービス/HTTP待受を置換し、実cron＋模擬時計で次回日時と停止を確認、同期呼出し0回です。全依存audit0件。実際の同期やGoogle通信は実施していません。
