@@ -5,30 +5,22 @@
 
 require('dotenv').config();
 
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const { createApp } = require('./app');
+const { loadAccessConfig } = require('./access');
+const access = loadAccessConfig(process.env);
 const cron = require('node-cron');
 
 const {
   getActiveStudents,
   getPaymentData,
-  createOutputSpreadsheet,
   writeMonthlyData,
-  initOutputSpreadsheet,
   getOutputSpreadsheetData,
   colIndexToLetter,
   getColumnIndexForMonth,
   testConnection,
 } = require('./googleSheets');
 
-const app = express();
 const PORT = process.env.PORT || 3000;
-
-// ミドルウェア設定
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 // =============================
 // ヘルパー関数
@@ -84,228 +76,15 @@ async function syncData(yearMonth) {
       studentsCount: students.length,
     };
   } catch (error) {
-    console.error('同期エラー:', error.message);
+    console.error('同期に失敗しました。接続設定を確認してください。');
     throw error;
   }
 }
 
-// =============================
-// APIエンドポイント
-// =============================
-
-/**
- * GET /api/debug-auth
- * 認証情報の診断
- */
-app.get('/api/debug-auth', (req, res) => {
-  const result = { methods: {}, recommendation: '' };
-
-  // --- 方式1: 個別キー ---
-  const email = process.env.GOOGLE_CLIENT_EMAIL || '';
-  const pkey  = process.env.GOOGLE_PRIVATE_KEY  || '';
-  result.methods.individual = {
-    GOOGLE_CLIENT_EMAIL_set: !!email,
-    GOOGLE_CLIENT_EMAIL_value: email || '(未設定)',
-    GOOGLE_PRIVATE_KEY_set: !!pkey,
-    GOOGLE_PRIVATE_KEY_first50: pkey ? pkey.slice(0, 50) : '(未設定)',
-    GOOGLE_PRIVATE_KEY_hasNewline: pkey.includes('\n'),
-    GOOGLE_PRIVATE_KEY_hasEscapedNewline: pkey.includes('\\n'),
-    ok: !!(email && pkey),
-  };
-
-  // --- 方式2: JSON一括 ---
-  const raw = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim();
-  const jsonResult = { set: !!raw, length: raw.length, ok: false };
-  if (raw) {
-    jsonResult.first30 = raw.slice(0, 30);
-    // 生JSONとして試みる
-    try {
-      const j = JSON.parse(raw);
-      jsonResult.decodeMethod = 'raw_json';
-      jsonResult.hasClientEmail = !!j.client_email;
-      jsonResult.hasPrivateKey  = !!j.private_key;
-      jsonResult.clientEmail    = j.client_email || '(なし)';
-      jsonResult.ok = true;
-    } catch (_e1) {
-      // Base64として試みる
-      try {
-        const j = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
-        jsonResult.decodeMethod = 'base64';
-        jsonResult.hasClientEmail = !!j.client_email;
-        jsonResult.hasPrivateKey  = !!j.private_key;
-        jsonResult.clientEmail    = j.client_email || '(なし)';
-        jsonResult.ok = true;
-      } catch (_e2) {
-        jsonResult.error = '生JSONもBase64も解析失敗';
-      }
-    }
-  }
-  result.methods.json = jsonResult;
-
-  // 推奨アクション
-  if (result.methods.individual.ok) {
-    result.recommendation = '✅ 個別キー方式で認証情報が設定されています';
-  } else if (result.methods.json.ok) {
-    result.recommendation = '✅ JSON方式で認証情報が設定されています';
-  } else {
-    result.recommendation =
-      '❌ 認証情報が正しく設定されていません。' +
-      '【推奨】Renderの環境変数に GOOGLE_CLIENT_EMAIL と GOOGLE_PRIVATE_KEY を個別に設定してください。';
-  }
-
-  res.json(result);
-});
-
-/**
- * GET /api/status
- * サーバー状態確認 & 接続テスト
- */
-app.get('/api/status', async (req, res) => {
-  // testConnection は内部で例外を握りつぶすので、ここでは常に200を返す
-  const connectionTest = await testConnection();
-  const currentMonth = getCurrentYearMonth();
-  const previousMonth = getPreviousYearMonth();
-
-  res.json({
-    status: 'running',
-    currentMonth,
-    previousMonth,
-    spreadsheets: {
-      student: process.env.STUDENT_SPREADSHEET_ID ? '設定済み' : '未設定',
-      payment: process.env.PAYMENT_SPREADSHEET_ID ? '設定済み' : '未設定',
-      output: process.env.OUTPUT_SPREADSHEET_ID ? '設定済み' : '未設定',
-    },
-    connection: connectionTest,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-/**
- * POST /api/sync
- * 手動でデータ同期を実行
- * Body: { yearMonth: "2026/4" } (省略時は今月)
- */
-app.post('/api/sync', async (req, res) => {
-  try {
-    const { yearMonth } = req.body || {};
-    const result = await syncData(yearMonth);
-    res.json(result);
-  } catch (error) {
-    console.error('同期エラー:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-/**
- * POST /api/create-spreadsheet
- * 出力用スプレッドシートを新規作成
- */
-app.post('/api/create-spreadsheet', async (req, res) => {
-  try {
-    const { spreadsheetId, spreadsheetUrl } = await createOutputSpreadsheet();
-    
-    // 初期化
-    process.env.OUTPUT_SPREADSHEET_ID = spreadsheetId;
-    await initOutputSpreadsheet();
-    
-    res.json({
-      success: true,
-      spreadsheetId,
-      spreadsheetUrl,
-      message: '新規スプレッドシートを作成しました。OUTPUT_SPREADSHEET_IDをこのIDに設定してください。',
-    });
-  } catch (error) {
-    console.error('スプレッドシート作成エラー:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-/**
- * GET /api/data
- * 出力スプレッドシートの現在のデータを取得
- */
-app.get('/api/data', async (req, res) => {
-  try {
-    const rawData = await getOutputSpreadsheetData();
-    
-    if (rawData.length === 0) {
-      return res.json({ headers: [], rows: [] });
-    }
-    
-    const headers = rawData[0] || [];
-    const rows = rawData.slice(1);
-    
-    res.json({
-      headers,
-      rows,
-      totalStudents: rows.length,
-    });
-  } catch (error) {
-    console.error('データ取得エラー:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * GET /api/students
- * アクティブ生徒一覧を取得
- */
-app.get('/api/students', async (req, res) => {
-  try {
-    const students = await getActiveStudents();
-    res.json({ students, count: students.length });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * GET /api/payment/:yearMonth
- * 特定月の支払いデータを取得
- * 例: GET /api/payment/2026%2F4
- */
-app.get('/api/payment/:yearMonth', async (req, res) => {
-  try {
-    const yearMonth = decodeURIComponent(req.params.yearMonth);
-    const paymentMap = await getPaymentData(yearMonth);
-    res.json({ yearMonth, data: paymentMap, count: Object.keys(paymentMap).length });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * GET /api/column-info/:yearMonth
- * 特定月の列情報を取得
- */
-app.get('/api/column-info/:yearMonth', async (req, res) => {
-  try {
-    const yearMonth = decodeURIComponent(req.params.yearMonth);
-    const colIndex = getColumnIndexForMonth(yearMonth);
-    const colLetter = colIndexToLetter(colIndex);
-    
-    res.json({
-      yearMonth,
-      columnIndex: colIndex,
-      columnLetter: colLetter,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * GET /
- * フロントエンド（管理画面）
- */
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+const app = createApp(access, {
+  getActiveStudents, getPaymentData, getOutputSpreadsheetData,
+  colIndexToLetter, getColumnIndexForMonth, testConnection,
+  getCurrentYearMonth, getPreviousYearMonth, syncData,
 });
 
 // =============================
@@ -317,7 +96,7 @@ cron.schedule('0 22 3 * *', async () => {
     await syncData();
     console.log('✅ 定期実行完了');
   } catch (error) {
-    console.error('❌ 定期実行エラー:', error.message);
+    console.error('定期同期に失敗しました。接続設定を確認してください。');
   }
 }, {
   timezone: 'Asia/Tokyo',
