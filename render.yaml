@@ -2,7 +2,7 @@ services:
   - type: web
     name: miharai-history
     env: node
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: node server.js
     plan: free
     healthCheckPath: /health
