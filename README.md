@@ -148,3 +148,6 @@ npm start
 package-lock.jsonをpackage.jsonの宣言範囲へ整合し、別アプリ名・別メジャーExpress/Google APIs等が記録された旧lockを解消しました。package.jsonのバージョン範囲は変更していません。Render BlueprintのbuildCommandはnpm ciです。新環境でもnpm ciを使用し、依存を更新する場合はmanifestとlockを同時にレビューしてください。
 
 認証診断API（SEC-045）は第1バッチですでに管理者認証必須・booleanだけの応答へ修正済みです。今回、ダミー秘密値を使った既存回帰テストで再確認しました。秘密値の断片・アカウント名は返しません。
+
+### Google APIクライアント更新（2026-10-23）
+googleapisを150.0.1へ更新し、Google連携側の古いuuid推移依存を除去しました。Sheets v4 / Drive v3の使用方法と認証設定は維持します。Node22.23.4でclean install（ignore-scripts）、認可7件とGoogle連携4件の計11テストが成功。実GoogleAuthと生成API/Gaxiosを使用し、認証メタデータ・HTTP応答のみ置き換えて読取り/空応答/Drive作成/Sheets rename・init・batch・append/失敗を確認しました。外部通信を遮断しており、実際の鍵署名・Google認証・本番シートへの書込みは未検証です。production auditはModerate5→2（node-cronとuuidが残存）、High/Critical0。
